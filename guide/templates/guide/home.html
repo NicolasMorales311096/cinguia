@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CinGuía</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body{margin:0;font-family:system-ui;background:linear-gradient(180deg,#0b1020,#0f172a);color:#fff}
+.container{max-width:1200px;margin:auto;padding:40px 25px}
+h1{font-size:34px;margin-bottom:8px}
+p{color:#9aa7c7;margin-bottom:30px}
+
+.search{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+input,select,button{padding:14px;border-radius:12px;border:none;font-size:15px}
+input{flex:1;min-width:240px;background:#1e293b;color:white}
+select{background:#1e293b;color:white}
+button{background:#3b82f6;color:white;cursor:pointer;font-weight:600}
+button:hover{background:#2563eb}
+
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:28px;margin-top:18px}
+
+.card{
+  background:#111827;
+  padding:18px;
+  border-radius:18px;
+  transition:0.25s ease;
+  box-shadow:0 10px 25px rgba(0,0,0,.3);
+}
+.card:hover{transform:translateY(-6px);box-shadow:0 20px 40px rgba(0,0,0,.5)}
+
+.poster{width:100%;border-radius:14px;margin-bottom:15px;display:block}
+.title{font-size:18px;font-weight:700;margin-bottom:10px}
+.section-label{font-size:13px;color:#9aa7c7;margin-top:10px;margin-bottom:6px}
+
+.providers{display:flex;flex-wrap:wrap;gap:8px}
+.providers img{
+  height:32px;width:auto;object-fit:contain;
+  background:rgba(255,255,255,.08);
+  padding:6px 12px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.15);
+  transition:.2s
+}
+.providers img:hover{transform:scale(1.08);background:rgba(255,255,255,.14)}
+.empty{color:#9aa7c7;font-size:13px}
+
+.detail-row{margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.detail-btn{
+  display:inline-block;
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(59,130,246,.25);
+  border:1px solid rgba(59,130,246,.45);
+  color:#fff;
+  font-weight:700;
+  text-decoration:none;
+}
+.detail-btn:hover{background:rgba(59,130,246,.35)}
+.small{color:#9aa7c7;font-size:12px}
+
+.history-section{margin-top:60px}
+.history-buttons{display:flex;flex-wrap:wrap;gap:10px}
+.history-buttons button{
+  padding:10px 12px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.06);
+  color:white;cursor:pointer
+}
+.history-buttons button:hover{background:rgba(255,255,255,.10)}
+
+footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#9aa7c7;font-size:14px}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h1>🍿 CinGuía</h1>
+  <p>Busca una película o serie y descubre dónde verla.</p>
+
+  <div class="search">
+    <input id="query" placeholder="Ej: Interstellar">
+    <select id="type">
+      <option value="movie">Película</option>
+      <option value="tv">Serie</option>
+    </select>
+    <button onclick="buscar()">Buscar</button>
+  </div>
+
+  <div id="results" class="results"></div>
+
+  <div class="history-section">
+    <h2 style="margin:0 0 10px;">🕘 Últimas búsquedas</h2>
+    <p style="margin-top:0;">Haz clic en una búsqueda para repetirla.</p>
+
+    <div class="history-buttons">
+      {% for s in last_searches %}
+        <button onclick="repeatSearch('{{ s.query|escapejs }}','{{ s.type }}','{{ s.region }}')">
+          {{ s.query }} · {{ s.type|upper }} · {{ s.region }}
+        </button>
+      {% empty %}
+        <span class="empty">Aún no hay búsquedas guardadas.</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<footer>© Nicolás Morales 2026 – Todos los derechos reservados.</footer>
+
+<script>
+function repeatSearch(query, type, region){
+  document.getElementById("query").value = query;
+  document.getElementById("type").value = type;
+  buscar(region);
+}
+
+async function buscar(regionOverride=null){
+  const q = document.getElementById("query").value.trim();
+  const type = document.getElementById("type").value;
+  const region = regionOverride || "CL";
+
+  if(!q) return;
+
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`);
+  const data = await res.json();
+
+  const container = document.getElementById("results");
+  container.innerHTML = "";
+
+  (data.results || []).forEach(item => {
+    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";
+    const safeType = (item.type === "tv") ? "tv" : "movie";
+    const detailUrl = `/title/${safeType}/${item.tmdb_id}/?region=${encodeURIComponent(region)}`;
+
+    const renderProviders = (providers) => {
+      if(!providers || providers.length === 0){
+        return `<div class="empty">No disponible</div>`;
+      }
+      return `
+        <div class="providers">
+          ${providers.map(p => `
+            <img src="https://image.tmdb.org/t/p/w92${p.logo_path}" title="${p.provider_name}">
+          `).join("")}
+        </div>
+      `;
+    };
+
+    container.innerHTML += `
+      <div class="card">
+        ${poster ? `<img class="poster" src="${poster}" alt="">` : ""}
+        <div class="title">${item.name} (${item.year || ""})</div>
+
+        <div class="section-label">Streaming</div>
+        ${renderProviders(item.offers.flatrate)}
+
+        <div class="section-label">Arriendo</div>
+        ${renderProviders(item.offers.rent)}
+
+        <div class="section-label">Compra</div>
+        ${renderProviders(item.offers.buy)}
+
+        <div class="detail-row">
+          <a class="detail-btn" href="${detailUrl}">Ver detalles →</a>
+          <span class="small">TMDB ID: ${item.tmdb_id}</span>
+        </div>
+      </div>
+    `;
+  });
+}
+</script>
+</body>
+</html>
