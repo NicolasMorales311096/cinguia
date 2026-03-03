@@ -3,10 +3,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-
-    # HTML (páginas)
-    path("", include("guide.urls")),
-
-    # API (endpoints)
-    path("api/", include("guide.api_urls")),
+    path("", include("guide.urls")),  # Web + API dentro de guide/urls.py
 ]
