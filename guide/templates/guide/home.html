@@ -68,6 +68,8 @@ button:hover{background:#2563eb}
 }
 .history-buttons button:hover{background:rgba(255,255,255,.10)}
 
+.status{margin-top:12px;color:#9aa7c7;font-size:13px}
+
 footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#9aa7c7;font-size:14px}
 </style>
 </head>
@@ -83,9 +85,10 @@ footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#
       <option value="movie">Película</option>
       <option value="tv">Serie</option>
     </select>
-    <button onclick="buscar()">Buscar</button>
+    <button id="btnBuscar" onclick="buscar()">Buscar</button>
   </div>
 
+  <div id="status" class="status"></div>
   <div id="results" class="results"></div>
 
   <div class="history-section">
@@ -107,6 +110,13 @@ footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#
 <footer>© Nicolás Morales 2026 – Todos los derechos reservados.</footer>
 
 <script>
+const statusEl = document.getElementById("status");
+const btnBuscar = document.getElementById("btnBuscar");
+
+document.getElementById("query").addEventListener("keydown", (e) => {
+  if(e.key === "Enter") buscar();
+});
+
 function repeatSearch(query, type, region){
   document.getElementById("query").value = query;
   document.getElementById("type").value = type;
@@ -120,16 +130,26 @@ async function buscar(regionOverride=null){
 
   if(!q) return;
 
-  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`);
-  const data = await res.json();
+  statusEl.textContent = "Buscando...";
+  btnBuscar.disabled = true;
 
-  const container = document.getElementById("results");
-  container.innerHTML = "";
+  try{
+    // ✅ IMPORTANTE: ahora es /api/search/ (con slash final)
+    const res = await fetch(`/api/search/?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`);
 
-  (data.results || []).forEach(item => {
-    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";
-    const safeType = (item.type === "tv") ? "tv" : "movie";
-    const detailUrl = `/title/${safeType}/${item.tmdb_id}/?region=${encodeURIComponent(region)}`;
+    if(!res.ok){
+      statusEl.textContent = "Hubo un error consultando la API.";
+      btnBuscar.disabled = false;
+      return;
+    }
+
+    const data = await res.json();
+
+    const container = document.getElementById("results");
+    container.innerHTML = "";
+
+    const items = (data.results || []);
+    statusEl.textContent = items.length ? `Resultados: ${items.length}` : "Sin resultados.";
 
     const renderProviders = (providers) => {
       if(!providers || providers.length === 0){
@@ -137,34 +157,47 @@ async function buscar(regionOverride=null){
       }
       return `
         <div class="providers">
-          ${providers.map(p => `
-            <img src="https://image.tmdb.org/t/p/w92${p.logo_path}" title="${p.provider_name}">
-          `).join("")}
+          ${providers
+            .filter(p => p && p.logo_path)  // ✅ evita logos null
+            .map(p => `
+              <img src="https://image.tmdb.org/t/p/w92${p.logo_path}" title="${p.provider_name || ''}">
+            `).join("")}
         </div>
       `;
     };
 
-    container.innerHTML += `
-      <div class="card">
-        ${poster ? `<img class="poster" src="${poster}" alt="">` : ""}
-        <div class="title">${item.name} (${item.year || ""})</div>
+    items.forEach(item => {
+      const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";
+      const safeType = (item.type === "tv") ? "tv" : "movie";
+      const detailUrl = `/title/${safeType}/${item.tmdb_id}/?region=${encodeURIComponent(region)}`;
 
-        <div class="section-label">Streaming</div>
-        ${renderProviders(item.offers.flatrate)}
+      container.innerHTML += `
+        <div class="card">
+          ${poster ? `<img class="poster" src="${poster}" alt="">` : ""}
+          <div class="title">${item.name} (${item.year || ""})</div>
 
-        <div class="section-label">Arriendo</div>
-        ${renderProviders(item.offers.rent)}
+          <div class="section-label">Streaming</div>
+          ${renderProviders(item.offers?.flatrate)}
 
-        <div class="section-label">Compra</div>
-        ${renderProviders(item.offers.buy)}
+          <div class="section-label">Arriendo</div>
+          ${renderProviders(item.offers?.rent)}
 
-        <div class="detail-row">
-          <a class="detail-btn" href="${detailUrl}">Ver detalles →</a>
-          <span class="small">TMDB ID: ${item.tmdb_id}</span>
+          <div class="section-label">Compra</div>
+          ${renderProviders(item.offers?.buy)}
+
+          <div class="detail-row">
+            <a class="detail-btn" href="${detailUrl}">Ver detalles →</a>
+            <span class="small">TMDB ID: ${item.tmdb_id}</span>
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
+
+  }catch(err){
+    statusEl.textContent = "Error de red. Revisa consola o logs.";
+  }finally{
+    btnBuscar.disabled = false;
+  }
 }
 </script>
 </body>
