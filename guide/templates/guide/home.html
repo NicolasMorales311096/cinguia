@@ -68,6 +68,27 @@ button:hover{background:#2563eb}
 }
 .history-buttons button:hover{background:rgba(255,255,255,.10)}
 
+.notice{
+  margin-top:12px;
+  padding:12px 14px;
+  border-radius:12px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);
+  color:#cbd5e1;
+  display:none;
+}
+
+.notice.error{
+  background:rgba(239,68,68,.12);
+  border:1px solid rgba(239,68,68,.25);
+  color:#fecaca;
+  display:block;
+}
+
+.notice.info{
+  display:block;
+}
+
 footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#9aa7c7;font-size:14px}
 </style>
 </head>
@@ -83,8 +104,10 @@ footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#
       <option value="movie">Película</option>
       <option value="tv">Serie</option>
     </select>
-    <button onclick="buscar()">Buscar</button>
+    <button id="btnBuscar" onclick="buscar()">Buscar</button>
   </div>
+
+  <div id="notice" class="notice"></div>
 
   <div id="results" class="results"></div>
 
@@ -107,6 +130,28 @@ footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#
 <footer>© Nicolás Morales 2026 – Todos los derechos reservados.</footer>
 
 <script>
+const notice = document.getElementById("notice");
+const btnBuscar = document.getElementById("btnBuscar");
+const inputQuery = document.getElementById("query");
+
+function showInfo(msg){
+  notice.className = "notice info";
+  notice.textContent = msg;
+}
+function showError(msg){
+  notice.className = "notice error";
+  notice.textContent = msg;
+}
+function clearNotice(){
+  notice.className = "notice";
+  notice.textContent = "";
+  notice.style.display = "none";
+}
+
+inputQuery.addEventListener("keydown", (e) => {
+  if(e.key === "Enter") buscar();
+});
+
 function repeatSearch(query, type, region){
   document.getElementById("query").value = query;
   document.getElementById("type").value = type;
@@ -118,53 +163,87 @@ async function buscar(regionOverride=null){
   const type = document.getElementById("type").value;
   const region = regionOverride || "CL";
 
-  if(!q) return;
+  if(!q){
+    showError("Escribe una película o serie para buscar.");
+    return;
+  }
 
-  const res = await fetch(`/api/search/?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`);
-  const data = await res.json();
+  btnBuscar.disabled = true;
+  btnBuscar.textContent = "Buscando...";
+  showInfo("Buscando en TMDB…");
 
-  const container = document.getElementById("results");
-  container.innerHTML = "";
+  const url = `/api/search/?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`;
 
-  (data.results || []).forEach(item => {
-    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";
-    const safeType = (item.type === "tv") ? "tv" : "movie";
-    const detailUrl = `/title/${safeType}/${item.tmdb_id}/?region=${encodeURIComponent(region)}`;
+  try{
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
 
-    const renderProviders = (providers) => {
-      if(!providers || providers.length === 0){
-        return `<div class="empty">No disponible</div>`;
-      }
-      return `
-        <div class="providers">
-          ${providers.map(p => `
-            <img src="https://image.tmdb.org/t/p/w92${p.logo_path}" title="${p.provider_name}">
-          `).join("")}
+    if(!res.ok){
+      const text = await res.text();
+      console.error("API error:", res.status, text);
+      showError(`Error al buscar (HTTP ${res.status}). Revisa si tu API está en /api/search/`);
+      return;
+    }
+
+    const data = await res.json();
+    const container = document.getElementById("results");
+    container.innerHTML = "";
+
+    if(!(data.results || []).length){
+      showInfo("No encontré resultados. Prueba con otro nombre.");
+      return;
+    }
+
+    notice.style.display = "none";
+
+    (data.results || []).forEach(item => {
+      const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";
+      const safeType = (item.type === "tv") ? "tv" : "movie";
+      const detailUrl = `/title/${safeType}/${item.tmdb_id}/?region=${encodeURIComponent(region)}`;
+
+      const renderProviders = (providers) => {
+        if(!providers || providers.length === 0){
+          return `<div class="empty">No disponible</div>`;
+        }
+        return `
+          <div class="providers">
+            ${providers
+              .filter(p => p.logo_path)
+              .map(p => `
+                <img src="https://image.tmdb.org/t/p/w92${p.logo_path}" title="${p.provider_name}">
+              `).join("")}
+          </div>
+        `;
+      };
+
+      container.innerHTML += `
+        <div class="card">
+          ${poster ? `<img class="poster" src="${poster}" alt="">` : ""}
+          <div class="title">${item.name} (${item.year || ""})</div>
+
+          <div class="section-label">Streaming</div>
+          ${renderProviders(item.offers.flatrate)}
+
+          <div class="section-label">Arriendo</div>
+          ${renderProviders(item.offers.rent)}
+
+          <div class="section-label">Compra</div>
+          ${renderProviders(item.offers.buy)}
+
+          <div class="detail-row">
+            <a class="detail-btn" href="${detailUrl}">Ver detalles →</a>
+            <span class="small">TMDB ID: ${item.tmdb_id}</span>
+          </div>
         </div>
       `;
-    };
+    });
 
-    container.innerHTML += `
-      <div class="card">
-        ${poster ? `<img class="poster" src="${poster}" alt="">` : ""}
-        <div class="title">${item.name} (${item.year || ""})</div>
-
-        <div class="section-label">Streaming</div>
-        ${renderProviders(item.offers.flatrate)}
-
-        <div class="section-label">Arriendo</div>
-        ${renderProviders(item.offers.rent)}
-
-        <div class="section-label">Compra</div>
-        ${renderProviders(item.offers.buy)}
-
-        <div class="detail-row">
-          <a class="detail-btn" href="${detailUrl}">Ver detalles →</a>
-          <span class="small">TMDB ID: ${item.tmdb_id}</span>
-        </div>
-      </div>
-    `;
-  });
+  }catch(err){
+    console.error("Fetch failed:", err);
+    showError("No pude conectar con la API. Abre F12 → Console y revisa el error.");
+  }finally{
+    btnBuscar.disabled = false;
+    btnBuscar.textContent = "Buscar";
+  }
 }
 </script>
 </body>
