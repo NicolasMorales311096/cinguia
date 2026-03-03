@@ -23,9 +23,21 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
+DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
 
-ALLOWED_HOSTS = ["*"]
+# Railway host dinámico
+RAILWAY_HOST = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+if RAILWAY_HOST:
+    ALLOWED_HOSTS.append(RAILWAY_HOST)
+
+# CSRF para producción
+CSRF_TRUSTED_ORIGINS = []
+
+if RAILWAY_HOST:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{RAILWAY_HOST}")
 
 
 # ===============================
@@ -44,9 +56,13 @@ INSTALLED_APPS = [
 ]
 
 
+# ===============================
+# MIDDLEWARE
+# ===============================
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # 🔥 Para static en producción
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # 🔥 Static en producción
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -58,6 +74,10 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+
+# ===============================
+# TEMPLATES
+# ===============================
 
 TEMPLATES = [
     {
@@ -112,7 +132,6 @@ AUTH_PASSWORD_VALIDATORS = [
 # ===============================
 
 LANGUAGE_CODE = "es-cl"
-
 TIME_ZONE = "America/Santiago"
 
 USE_I18N = True
@@ -126,7 +145,11 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
 
 
 # ===============================
