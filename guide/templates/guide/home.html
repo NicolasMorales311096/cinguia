@@ -107,8 +107,6 @@ footer{margin-top:80px;padding:25px;text-align:center;background:#0a0f1a;color:#
 <footer>© Nicolás Morales 2026 – Todos los derechos reservados.</footer>
 
 <script>
-const API_BASE = "/api";
-
 function repeatSearch(query, type, region){
   document.getElementById("query").value = query;
   document.getElementById("type").value = type;
@@ -119,20 +117,14 @@ async function buscar(regionOverride=null){
   const q = document.getElementById("query").value.trim();
   const type = document.getElementById("type").value;
   const region = regionOverride || "CL";
+
   if(!q) return;
 
-  const url = `${API_BASE}/search/?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`;
-
-  const res = await fetch(url);
+  const res = await fetch(`/api/search/?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&region=${encodeURIComponent(region)}`);
   const data = await res.json();
 
   const container = document.getElementById("results");
   container.innerHTML = "";
-
-  if(data.error){
-    container.innerHTML = `<div class="empty">${data.error}</div>`;
-    return;
-  }
 
   (data.results || []).forEach(item => {
     const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "";

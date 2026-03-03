@@ -3,5 +3,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("guide.urls")),  # Web + API dentro de guide/urls.py
+    path("", include("guide.urls")),
 ]

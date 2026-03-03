@@ -44,6 +44,11 @@ def _pick_providers(region_data: dict) -> dict:
 
 
 class SearchView(APIView):
+    """
+    GET /api/search/?q=Interstellar&type=movie&region=CL
+    GET /api/search/?q=Stranger%20Things&type=tv&region=CL
+    """
+
     def get(self, request):
         q = (request.query_params.get("q") or "").strip()
         tmdb_type = (request.query_params.get("type") or "movie").strip().lower()
@@ -53,34 +58,26 @@ class SearchView(APIView):
             return Response({"error": "Falta el parámetro 'q'."}, status=status.HTTP_400_BAD_REQUEST)
 
         if tmdb_type not in ["movie", "tv"]:
-            return Response({"error": "El parámetro 'type' debe ser 'movie' o 'tv'."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            raw = search_tv(q) if tmdb_type == "tv" else search_movie(q, region)
-        except Exception as e:
-            # Evita 500 si falta token / TMDB cae
             return Response(
-                {"error": "No se pudo consultar TMDB. Revisa TMDB_READ_TOKEN y la conectividad.", "detail": str(e)},
-                status=status.HTTP_502_BAD_GATEWAY,
+                {"error": "El parámetro 'type' debe ser 'movie' o 'tv'."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
+        raw = search_tv(q) if tmdb_type == "tv" else search_movie(q, region)
         results = (raw.get("results") or [])[:5]
-        formatted = []
 
+        formatted = []
         for item in results:
             tmdb_id = item.get("id")
 
-            try:
-                if tmdb_type == "tv":
-                    name = item.get("name") or ""
-                    year = (item.get("first_air_date") or "")[:4]
-                    prov = tv_watch_providers(tmdb_id)
-                else:
-                    name = item.get("title") or ""
-                    year = (item.get("release_date") or "")[:4]
-                    prov = movie_watch_providers(tmdb_id)
-            except Exception:
-                prov = {"results": {}}
+            if tmdb_type == "tv":
+                name = item.get("name") or ""
+                year = (item.get("first_air_date") or "")[:4]
+                prov = tv_watch_providers(tmdb_id)
+            else:
+                name = item.get("title") or ""
+                year = (item.get("release_date") or "")[:4]
+                prov = movie_watch_providers(tmdb_id)
 
             region_data = ((prov.get("results") or {}).get(region)) or {}
             offers = _pick_providers(region_data)
@@ -108,34 +105,34 @@ class SearchView(APIView):
 def title_detail(request, tmdb_type, tmdb_id):
     region = (request.GET.get("region") or os.getenv("TMDB_REGION", "CL")).strip().upper()
 
-    if tmdb_type not in ["movie", "tv"]:
-        raise Http404("Tipo no válido")
+    if tmdb_type == "tv":
+        detail = tv_details(tmdb_id) or {}
+        prov = tv_watch_providers(tmdb_id) or {}
+        vids = tv_videos(tmdb_id) or {}
 
-    try:
-        if tmdb_type == "tv":
-            detail = tv_details(tmdb_id)
-            prov = tv_watch_providers(tmdb_id)
-            vids = tv_videos(tmdb_id)
-            name = detail.get("name", "")
-            year = (detail.get("first_air_date") or "")[:4]
-            overview = detail.get("overview", "")
-            rating = detail.get("vote_average", 0)
-            poster_path = detail.get("poster_path", "")
-            genres = [g.get("name") for g in (detail.get("genres") or [])]
-            extra = {"seasons": detail.get("number_of_seasons"), "episodes": detail.get("number_of_episodes")}
-        else:
-            detail = movie_details(tmdb_id)
-            prov = movie_watch_providers(tmdb_id)
-            vids = movie_videos(tmdb_id)
-            name = detail.get("title", "")
-            year = (detail.get("release_date") or "")[:4]
-            overview = detail.get("overview", "")
-            rating = detail.get("vote_average", 0)
-            poster_path = detail.get("poster_path", "")
-            genres = [g.get("name") for g in (detail.get("genres") or [])]
-            extra = {"runtime": detail.get("runtime")}
-    except Exception as e:
-        raise Http404(f"No se pudo cargar el detalle: {e}")
+        name = detail.get("name", "")
+        year = (detail.get("first_air_date") or "")[:4]
+        overview = detail.get("overview", "")
+        rating = detail.get("vote_average", 0)
+        poster_path = detail.get("poster_path", "")
+        genres = [g.get("name") for g in (detail.get("genres") or [])]
+        extra = {"seasons": detail.get("number_of_seasons"), "episodes": detail.get("number_of_episodes")}
+
+    elif tmdb_type == "movie":
+        detail = movie_details(tmdb_id) or {}
+        prov = movie_watch_providers(tmdb_id) or {}
+        vids = movie_videos(tmdb_id) or {}
+
+        name = detail.get("title", "")
+        year = (detail.get("release_date") or "")[:4]
+        overview = detail.get("overview", "")
+        rating = detail.get("vote_average", 0)
+        poster_path = detail.get("poster_path", "")
+        genres = [g.get("name") for g in (detail.get("genres") or [])]
+        extra = {"runtime": detail.get("runtime")}
+
+    else:
+        raise Http404("Tipo no válido")
 
     region_data = ((prov.get("results") or {}).get(region)) or {}
     offers = _pick_providers(region_data)
